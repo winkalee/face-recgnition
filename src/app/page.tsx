@@ -23,30 +23,35 @@ export default function Home() {
     if (files.length === 0) return;
 
     setLoading(true);
-    // Load face-api models (assuming models are in public/models)
-    await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-    await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-    await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+    try {
+      // Load face-api models (assuming models are in public/models)
+      await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+      await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+      await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
 
-    // Process faces
-    const faceDescriptors = [];
-    for (const file of files) {
-      const img = await faceapi.bufferToImage(file);
-      const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-      if (detection) {
-        faceDescriptors.push(detection.descriptor);
+      // Process faces
+      const faceDescriptors = [];
+      for (const file of files) {
+        const img = await faceapi.fetchImage(URL.createObjectURL(file));
+        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+        if (detection) {
+          faceDescriptors.push(detection.descriptor);
+        }
       }
+
+      // Simulate search
+      const mockResults = [
+        { platform: 'Twitter', username: '@example1', post: 'Saw this person at the park.', similarity: 0.95 },
+        { platform: 'Facebook', username: 'John Doe', post: 'Family reunion photo.', similarity: 0.88 },
+        { platform: 'Instagram', username: '@user2', post: 'Vacation pic.', similarity: 0.92 },
+      ];
+
+      setResults(mockResults);
+    } catch (error) {
+      alert('Error processing images: ' + (error as Error).message);
+    } finally {
+      setLoading(false);
     }
-
-    // Simulate search
-    const mockResults = [
-      { platform: 'Twitter', username: '@example1', post: 'Saw this person at the park.', similarity: 0.95 },
-      { platform: 'Facebook', username: 'John Doe', post: 'Family reunion photo.', similarity: 0.88 },
-      { platform: 'Instagram', username: '@user2', post: 'Vacation pic.', similarity: 0.92 },
-    ];
-
-    setResults(mockResults);
-    setLoading(false);
   };
 
   const handleInference = () => {

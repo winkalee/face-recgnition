@@ -24,6 +24,10 @@ export default function Home() {
 
     setLoading(true);
     try {
+      // Initialize TensorFlow backend
+      await faceapi.tf.setBackend('webgl');
+      await faceapi.tf.ready();
+
       // Load face-api models (assuming models are in public/models)
       await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
       await faceapi.nets.faceLandmark68Net.loadFromUri('/models');

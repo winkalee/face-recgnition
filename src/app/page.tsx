@@ -18,6 +18,48 @@ export default function Home() {
     }
   };
 
+  const createResizedCanvas = (img: HTMLImageElement, size = 256) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Failed to create canvas context');
+
+    // Fill with white background to avoid transparent images causing issues
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+
+    // Compute aspect-fit sizing
+    const { width: iw, height: ih } = img;
+    let dw = size, dh = size;
+    const ir = iw / ih;
+    if (iw > ih) {
+      // landscape
+      dh = Math.round(size / ir);
+      dw = size;
+    } else if (ih > iw) {
+      // portrait
+      dw = Math.round(size * ir);
+      dh = size;
+    }
+    const dx = Math.round((size - dw) / 2);
+    const dy = Math.round((size - dh) / 2);
+    ctx.drawImage(img, 0, 0, iw, ih, dx, dy, dw, dh);
+    return canvas;
+  };
+
+  const loadImageElement = (file: File): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        resolve(img);
+      };
+      img.onerror = (e) => reject(new Error('Failed to load image ' + file.name));
+      img.src = url;
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (files.length === 0) return;
@@ -34,13 +76,43 @@ export default function Home() {
       await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
 
       // Process faces
-      const faceDescriptors = [];
+      const faceDescriptors: Float32Array[] = [];
+      const errors: string[] = [];
+
       for (const file of files) {
-        const img = await faceapi.fetchImage(URL.createObjectURL(file));
-        const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-        if (detection) {
-          faceDescriptors.push(detection.descriptor);
+        try {
+          const imgEl = await loadImageElement(file);
+          // Create a 256x256 canvas and draw the image into it (aspect-fit)
+          const canvas = createResizedCanvas(imgEl, 256);
+
+          // Detect on the canvas (this ensures consistent tensor shape)
+          const detection = await faceapi
+            .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+          if (detection && detection.descriptor) {
+            faceDescriptors.push(detection.descriptor);
+          } else {
+            errors.push(`No face detected in ${file.name}`);
+          }
+
+          // Revoke object URL to avoid leaks
+          // Note: we used Image.src but didn't keep the URL variable here; revoke on file
+          // CreateObjectURL was used inside loadImageElement, which didn't return the url, so revoke via creating one again then revoking
+          try {
+            const tmpUrl = URL.createObjectURL(file);
+            URL.revokeObjectURL(tmpUrl);
+          } catch (e) {
+            // ignore
+          }
+        } catch (fileErr) {
+          errors.push(`${file.name}: ${(fileErr as Error).message}`);
         }
+      }
+
+      if (faceDescriptors.length === 0) {
+        throw new Error('No valid face descriptors extracted.\n' + errors.join('\n'));
       }
 
       // Simulate search
